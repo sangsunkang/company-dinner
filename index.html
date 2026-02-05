@@ -3,161 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>회식비 정산 계산기 (클라우드 저장)</title>
+    <title>회식비 정산 계산기</title>
     
-    <!-- React & Tailwind CDN -->
+    <!-- 필수 라이브러리 (CDN) -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Firebase SDK (저장 기능을 위함) -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        window.Firebase = { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, getFirestore, doc, setDoc, onSnapshot };
-    </script>
-
     <style>
-        body { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+        /* 모바일 최적화 및 터치감 개선 */
+        body { -webkit-tap-highlight-color: transparent; touch-action: manipulation; background-color: #f8fafc; }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         
-        .category-border-beef { border-left: 4px solid #ef4444; }
-        .category-border-pork { border-left: 4px solid #f97316; }
-        .category-border-drink { border-left: 4px solid #3b82f6; }
-        
+        .beef-border { border-left: 4px solid #ef4444; }
+        .pork-border { border-left: 4px solid #f97316; }
+        .drink-border { border-left: 4px solid #3b82f6; }
+
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
+            from { opacity: 0; transform: translateY(5px); }
             to { opacity: 1; transform: translateY(0); }
         }
         .animate-fadeIn { animation: fadeIn 0.3s ease-out forwards; }
-
-        .cloud-syncing { animation: pulse 1.5s infinite; }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.4; }
-        }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-900">
+<body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
+        const { useState, useEffect, useMemo } = React;
 
-        // 아이콘 컴포넌트
+        // 아이콘 모음 (SVG)
         const Icons = {
             Receipt: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17V7"/></svg>,
-            Plus: ({size=20}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>,
-            Minus: ({size=20}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/></svg>,
-            Users: ({size=20}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
-            Clock: ({size=20}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
-            Settings: ({size=20}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.72V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.17a2 2 0 0 1 1-1.74l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>,
-            Trash: ({size=18}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>,
-            Cloud: ({size=20, className=""}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.5 19c3.037 0 5.5-2.463 5.5-5.5 0-2.97-2.354-5.388-5.291-5.494A7 7 0 0 0 4 10.5c0 .356.027.705.081 1.046C1.94 12.067 0 14.303 0 17c0 3.314 2.686 6 6 6h11.5"/></svg>,
-            Check: ({size=20}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
-            RotateCcw: ({size=18}) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            Plus: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>,
+            Minus: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/></svg>,
+            Settings: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.72V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.17a2 2 0 0 1 1-1.74l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>,
+            Check: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
+            Trash: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>,
+            RotateCcw: () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
         };
 
         const App = () => {
-            const [user, setUser] = useState(null);
-            const [db, setDb] = useState(null);
-            const [isLoading, setIsLoading] = useState(true);
-            const [isSaving, setIsSaving] = useState(false);
-            const [appId] = useState(typeof __app_id !== 'undefined' ? __app_id : 'hoesik-calc-v1');
-
-            // 초기 메뉴 데이터 (DB에 데이터가 없을 때 사용)
-            const initialCategories = [
-                { id: 'beef', name: '🐂 소고기 메뉴', borderClass: 'category-border-beef', items: [
+            // --- 초기 데이터 설정 ---
+            const DEFAULT_CATEGORIES = [
+                { id: 'beef', name: '🐂 소고기', borderClass: 'beef-border', items: [
                     { id: 'b1', label: '소 등심', price: 45000, icon: '🥩' },
                     { id: 'b2', label: '소 갈비살', price: 45000, icon: '🍖' },
-                    { id: 'b3', label: '소 살치살', price: 45000, icon: '🔥' },
-                    { id: 'b4', label: '소 안창살', price: 45000, icon: '✨' }
+                    { id: 'b3', label: '소 살치살', price: 45000, icon: '🔥' }
                 ]},
-                { id: 'pork', name: '🐖 돼지고기 메뉴', borderClass: 'category-border-pork', items: [
-                    { id: 'p1', label: '돼지고기', price: 15000, icon: '🥓' }
+                { id: 'pork', name: '🐖 돼지고기', borderClass: 'pork-border', items: [
+                    { id: 'p1', label: '삼겹살', price: 15000, icon: '🥓' }
                 ]},
-                { id: 'drink', name: '🍺 주류 및 음료', borderClass: 'category-border-drink', items: [
+                { id: 'drink', name: '🍺 주류/음료', borderClass: 'drink-border', items: [
                     { id: 'd1', label: '소주', price: 5000, icon: '🧪' },
-                    { id: 'd2', label: '맥주', price: 6000, icon: '🍺' },
-                    { id: 'd3', label: '음료수', price: 4000, icon: '🥤' }
+                    { id: 'd2', label: '맥주', price: 6000, icon: '🍺' }
                 ]}
             ];
 
-            const [categories, setCategories] = useState(initialCategories);
-            const [counts, setCounts] = useState({});
-            const [logs, setLogs] = useState([]);
-            const [peopleCount, setPeopleCount] = useState(1);
+            // --- 상태 관리 ---
+            const [categories, setCategories] = useState(() => {
+                const saved = localStorage.getItem('hoesik_categories');
+                return saved ? JSON.parse(saved) : DEFAULT_CATEGORIES;
+            });
+            const [counts, setCounts] = useState(() => {
+                const saved = localStorage.getItem('hoesik_counts');
+                return saved ? JSON.parse(saved) : {};
+            });
+            const [logs, setLogs] = useState(() => {
+                const saved = localStorage.getItem('hoesik_logs');
+                return saved ? JSON.parse(saved) : [];
+            });
+            const [peopleCount, setPeopleCount] = useState(() => {
+                const saved = localStorage.getItem('hoesik_people');
+                return saved ? parseInt(saved) : 1;
+            });
             const [isEditMode, setIsEditMode] = useState(false);
 
-            // Firebase 초기화 및 익명 인증
+            // --- 자동 저장 ---
             useEffect(() => {
-                if (!window.Firebase) return;
-                const { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, getFirestore } = window.Firebase;
-                
-                const firebaseConfig = JSON.parse(__firebase_config);
-                const app = initializeApp(firebaseConfig);
-                const auth = getAuth(app);
-                const firestore = getFirestore(app);
-                setDb(firestore);
+                localStorage.setItem('hoesik_categories', JSON.stringify(categories));
+                localStorage.setItem('hoesik_counts', JSON.stringify(counts));
+                localStorage.setItem('hoesik_logs', JSON.stringify(logs));
+                localStorage.setItem('hoesik_people', peopleCount.toString());
+            }, [categories, counts, logs, peopleCount]);
 
-                const initAuth = async () => {
-                    try {
-                        await signInAnonymously(auth);
-                    } catch (e) { console.error(e); }
-                };
-                initAuth();
-
-                const unsubscribe = onAuthStateChanged(auth, (u) => {
-                    if (u) setUser(u);
-                });
-                return () => unsubscribe();
-            }, []);
-
-            // Firestore에서 데이터 불러오기 (실시간 동기화)
-            useEffect(() => {
-                if (!db || !user) return;
-                const { doc, onSnapshot } = window.Firebase;
-                
-                // 유저별 전용 저장소 경로 사용
-                const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'data');
-                
-                const unsubscribe = onSnapshot(docRef, (docSnap) => {
-                    if (docSnap.exists()) {
-                        const data = docSnap.data();
-                        if (data.categories) setCategories(data.categories);
-                        if (data.counts) setCounts(data.counts);
-                        if (data.logs) setLogs(data.logs);
-                        if (data.peopleCount) setPeopleCount(data.peopleCount);
-                    }
-                    setIsLoading(false);
-                }, (error) => {
-                    console.error("데이터 불러오기 실패:", error);
-                    setIsLoading(false);
-                });
-
-                return () => unsubscribe();
-            }, [db, user, appId]);
-
-            // 데이터 저장 함수
-            const saveToCloud = async (newData) => {
-                if (!db || !user) return;
-                const { doc, setDoc } = window.Firebase;
-                setIsSaving(true);
-                try {
-                    const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'data');
-                    await setDoc(docRef, newData, { merge: true });
-                } catch (e) {
-                    console.error("저장 실패:", e);
-                } finally {
-                    setTimeout(() => setIsSaving(false), 500);
-                }
-            };
-
+            // --- 계산 로직 ---
             const allItemsMap = useMemo(() => {
                 const map = {};
                 categories.forEach(cat => cat.items.forEach(item => { map[item.id] = item; }));
@@ -173,105 +106,76 @@
 
             const perPersonAmount = peopleCount > 0 ? Math.floor(totalAmount / peopleCount) : 0;
 
-            // 상태 변경 시 클라우드 저장 트리거 (디바운스 처리는 생략하고 즉시 저장)
+            // --- 핸들러 함수 ---
             const updateCount = (id, delta) => {
                 const current = counts[id] || 0;
                 if (current + delta < 0) return;
                 
                 const nextCounts = { ...counts, [id]: current + delta };
-                const item = allItemsMap[id];
-                const now = new Date();
-                const timeStr = now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
-                const nextLogs = [{ id: Date.now(), name: item.label, delta, time: timeStr }, ...logs].slice(0, 20);
-                
                 setCounts(nextCounts);
-                setLogs(nextLogs);
-                saveToCloud({ counts: nextCounts, logs: nextLogs });
-            };
-
-            const updatePeople = (delta) => {
-                const next = Math.max(1, peopleCount + delta);
-                setPeopleCount(next);
-                saveToCloud({ peopleCount: next });
-            };
-
-            const handleReset = () => {
-                if (window.confirm('모든 내역을 초기화할까요?')) {
-                    setCounts({});
-                    setLogs([]);
-                    setPeopleCount(1);
-                    saveToCloud({ counts: {}, logs: [], peopleCount: 1 });
+                
+                const item = allItemsMap[id];
+                if (item) {
+                    const now = new Date();
+                    const timeStr = now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+                    setLogs(prev => [{ id: Date.now(), name: item.label, delta, time: timeStr }, ...prev].slice(0, 20));
                 }
             };
 
-            // 메뉴 편집 로직
+            const handleReset = () => {
+                if (confirm('전체 주문 내역을 초기화할까요?')) {
+                    setCounts({});
+                    setLogs([]);
+                    setPeopleCount(1);
+                }
+            };
+
             const handleUpdateItem = (catId, itemId, field, value) => {
-                const nextCategories = categories.map(cat => {
+                setCategories(prev => prev.map(cat => {
                     if (cat.id !== catId) return cat;
                     return { ...cat, items: cat.items.map(item => {
                         if (item.id !== itemId) return item;
                         return { ...item, [field]: field === 'price' ? parseInt(value) || 0 : value };
                     })};
-                });
-                setCategories(nextCategories);
-                saveToCloud({ categories: nextCategories });
+                }));
             };
 
             const handleAddItem = (catId) => {
                 const newItem = { id: 'item-' + Date.now(), label: '새 메뉴', price: 10000, icon: '🍽️' };
-                const nextCategories = categories.map(cat => {
+                setCategories(prev => prev.map(cat => {
                     if (cat.id !== catId) return cat;
                     return { ...cat, items: [...cat.items, newItem] };
-                });
-                setCategories(nextCategories);
-                saveToCloud({ categories: nextCategories });
+                }));
             };
 
             const handleDeleteItem = (catId, itemId) => {
                 if (!confirm('삭제하시겠습니까?')) return;
-                const nextCategories = categories.map(cat => {
+                setCategories(prev => prev.map(cat => {
                     if (cat.id !== catId) return cat;
                     return { ...cat, items: cat.items.filter(i => i.id !== itemId) };
-                });
-                const nextCounts = { ...counts };
-                delete nextCounts[itemId];
-                
-                setCategories(nextCategories);
-                setCounts(nextCounts);
-                saveToCloud({ categories: nextCategories, counts: nextCounts });
+                }));
+                setCounts(prev => { const n = {...prev}; delete n[itemId]; return n; });
             };
 
-            if (isLoading) {
-                return (
-                    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 text-white">
-                        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                        <p className="text-sm font-bold opacity-60">데이터를 불러오는 중...</p>
-                    </div>
-                );
-            }
-
+            // --- UI 렌더링 ---
             return (
-                <div className="min-h-screen bg-slate-100 pb-12 font-sans select-none max-w-md mx-auto relative">
-                    {/* 플로팅 저장 상태 표시 */}
-                    <div className={`fixed bottom-4 right-4 z-50 px-3 py-1.5 rounded-full shadow-lg text-[10px] font-bold flex items-center gap-2 transition-all ${isSaving ? 'bg-blue-600 text-white opacity-100' : 'bg-white text-slate-400 opacity-0'}`}>
-                        <Icons.Cloud className="cloud-syncing" size={14} /> 클라우드에 저장 중...
-                    </div>
-
-                    <div className="sticky top-0 z-30 bg-white shadow-md border-b border-slate-200">
+                <div className="max-w-md mx-auto min-h-screen pb-10">
+                    {/* 헤더 */}
+                    <div className="sticky top-0 z-30 bg-white shadow-sm border-b border-slate-200">
                         <div className="bg-slate-900 px-4 py-3 flex justify-between items-center text-white">
-                            <h1 className="flex items-center gap-2 font-bold text-sm">
-                                <Icons.Receipt /> {isEditMode ? '메뉴판 편집' : '회식비 실시간 정산'}
-                            </h1>
-                            <div className="flex items-center gap-2">
-                                {!isEditMode && <button onClick={handleReset} className="p-2 text-slate-400"><Icons.RotateCcw size={18} /></button>}
+                            <div className="flex items-center gap-2 font-bold text-sm">
+                                <Icons.Receipt /> {isEditMode ? '메뉴판 편집' : '회식 정산기'}
+                            </div>
+                            <div className="flex gap-1">
+                                {!isEditMode && <button onClick={handleReset} className="p-2 text-slate-400"><Icons.RotateCcw /></button>}
                                 <button onClick={() => setIsEditMode(!isEditMode)} className={`p-2 rounded-full ${isEditMode ? 'bg-green-500 text-white' : 'text-slate-400'}`}>
-                                    {isEditMode ? <Icons.Check size={20} /> : <Icons.Settings size={20} />}
+                                    {isEditMode ? <Icons.Check /> : <Icons.Settings />}
                                 </button>
                             </div>
                         </div>
-                        <div className="p-5 text-center bg-white">
-                            <span className="text-[10px] text-slate-300 font-bold uppercase">Total Bill</span>
-                            <div className="text-4xl font-black text-slate-900 tracking-tighter">
+                        <div className="p-6 text-center">
+                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Total Bill</span>
+                            <div className="text-4xl font-black text-slate-800 mt-1">
                                 {totalAmount.toLocaleString()}원
                             </div>
                         </div>
@@ -279,24 +183,24 @@
 
                     <div className="p-4 space-y-6">
                         {categories.map(cat => (
-                            <section key={cat.id} className="space-y-3">
-                                <div className="flex justify-between items-center px-1">
-                                    <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{cat.name}</h2>
-                                    {isEditMode && <button onClick={() => handleAddItem(cat.id)} className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full"><Icons.Plus size={12} /> 추가</button>}
+                            <section key={cat.id} className="animate-fadeIn">
+                                <div className="flex justify-between items-center mb-3 px-1">
+                                    <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">{cat.name}</h2>
+                                    {isEditMode && <button onClick={() => handleAddItem(cat.id)} className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full">+ 추가</button>}
                                 </div>
                                 <div className="space-y-2">
                                     {cat.items.map(item => (
                                         <div key={item.id} className={`bg-white rounded-2xl shadow-sm border border-slate-200 transition-all ${cat.borderClass} ${isEditMode ? 'p-3' : 'p-4 flex items-center justify-between'}`}>
                                             {isEditMode ? (
-                                                <div className="flex flex-col gap-2">
+                                                <div className="w-full space-y-2">
                                                     <div className="flex items-center gap-2">
-                                                        <input className="w-8 text-center bg-slate-50 border rounded p-1 text-sm" value={item.icon} onChange={(e) => handleUpdateItem(cat.id, item.id, 'icon', e.target.value)} />
-                                                        <input className="flex-1 bg-slate-50 border rounded px-2 py-1 text-sm font-bold" value={item.label} onChange={(e) => handleUpdateItem(cat.id, item.id, 'label', e.target.value)} />
-                                                        <button onClick={() => handleDeleteItem(cat.id, item.id)} className="p-2 text-rose-400"><Icons.Trash size={16} /></button>
+                                                        <input className="w-8 text-center bg-slate-50 border rounded p-1 text-sm" value={item.icon} onChange={e => handleUpdateItem(cat.id, item.id, 'icon', e.target.value)} />
+                                                        <input className="flex-1 bg-slate-50 border rounded px-2 py-1 text-sm font-bold" value={item.label} onChange={e => handleUpdateItem(cat.id, item.id, 'label', e.target.value)} />
+                                                        <button onClick={() => handleDeleteItem(cat.id, item.id)} className="p-2 text-red-300"><Icons.Trash /></button>
                                                     </div>
                                                     <div className="flex items-center gap-2">
-                                                        <span className="text-[10px] text-slate-400 font-bold w-12 text-center">KRW</span>
-                                                        <input type="number" className="flex-1 bg-slate-50 border rounded px-2 py-1 text-sm font-mono text-blue-600" value={item.price} onChange={(e) => handleUpdateItem(cat.id, item.id, 'price', e.target.value)} />
+                                                        <span className="text-[10px] font-bold text-slate-300 w-8">KRW</span>
+                                                        <input type="number" className="flex-1 bg-slate-50 border rounded px-2 py-1 text-sm font-mono" value={item.price} onChange={e => handleUpdateItem(cat.id, item.id, 'price', e.target.value)} />
                                                     </div>
                                                 </div>
                                             ) : (
@@ -304,14 +208,14 @@
                                                     <div className="flex items-center gap-4">
                                                         <div className="text-2xl">{item.icon}</div>
                                                         <div>
-                                                            <h3 className="font-bold text-slate-800 text-sm leading-none">{item.label}</h3>
-                                                            <p className="text-slate-400 text-[11px] mt-1.5">{item.price.toLocaleString()}원</p>
+                                                            <div className="font-bold text-slate-800 text-sm leading-none mb-1">{item.label}</div>
+                                                            <div className="text-slate-400 text-[11px]">{item.price.toLocaleString()}원</div>
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-2 bg-slate-100 rounded-xl p-1">
-                                                        <button onClick={() => updateCount(item.id, -1)} disabled={!counts[item.id]} className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${!counts[item.id] ? 'text-slate-300' : 'bg-white text-rose-500 shadow-sm active:scale-90'}`}><Icons.Minus size={18} /></button>
+                                                        <button onClick={() => updateCount(item.id, -1)} disabled={!counts[item.id]} className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all ${!counts[item.id] ? 'text-slate-300' : 'bg-white text-rose-500 shadow-sm active:scale-90'}`}><Icons.Minus /></button>
                                                         <span className={`w-6 text-center font-black text-sm ${counts[item.id] ? 'text-slate-900' : 'text-slate-300'}`}>{counts[item.id] || 0}</span>
-                                                        <button onClick={() => updateCount(item.id, 1)} className="w-10 h-10 bg-white text-blue-600 rounded-lg shadow-sm flex items-center justify-center active:scale-90 transition-all"><Icons.Plus size={18} /></button>
+                                                        <button onClick={() => updateCount(item.id, 1)} className="w-9 h-9 bg-white text-blue-600 rounded-lg shadow-sm flex items-center justify-center active:scale-90 transition-all"><Icons.Plus /></button>
                                                     </div>
                                                 </>
                                             )}
@@ -323,32 +227,34 @@
 
                         {!isEditMode && (
                             <div className="space-y-4 pt-4">
-                                <div className="bg-indigo-600 rounded-3xl shadow-xl p-6 text-white overflow-hidden relative">
-                                    <div className="flex items-center justify-between mb-6 relative z-10">
-                                        <div className="flex items-center gap-2 opacity-80 text-[10px] font-bold uppercase tracking-widest"><Icons.Users size={16} /> Guests</div>
+                                {/* N빵 정산 */}
+                                <div className="bg-indigo-600 rounded-3xl shadow-lg p-6 text-white">
+                                    <div className="flex justify-between items-center mb-6">
+                                        <div className="text-[10px] font-bold opacity-60 uppercase">Guests</div>
                                         <div className="flex items-center gap-4">
-                                            <button onClick={() => updatePeople(-1)} className="w-9 h-9 rounded-xl bg-indigo-500/50 flex items-center justify-center"><Icons.Minus size={16}/></button>
-                                            <span className="font-black text-2xl w-8 text-center">{peopleCount}</span>
-                                            <button onClick={() => updatePeople(1)} className="w-9 h-9 rounded-xl bg-indigo-500/50 flex items-center justify-center"><Icons.Plus size={16}/></button>
+                                            <button onClick={() => setPeopleCount(p => Math.max(1, p - 1))} className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center"><Icons.Minus /></button>
+                                            <span className="text-xl font-black w-6 text-center">{peopleCount}</span>
+                                            <button onClick={() => setPeopleCount(p => p + 1)} className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center"><Icons.Plus /></button>
                                         </div>
                                     </div>
-                                    <div className="flex justify-between items-end border-t border-white/10 pt-5 relative z-10">
-                                        <span className="text-[10px] font-bold opacity-60 uppercase tracking-tighter">Per Person</span>
-                                        <span className="text-3xl font-black">{perPersonAmount.toLocaleString()}<span className="text-lg font-normal ml-0.5 opacity-80">원</span></span>
+                                    <div className="flex justify-between items-end border-t border-white/10 pt-4">
+                                        <div className="text-[10px] font-bold opacity-60 uppercase">Per Person</div>
+                                        <div className="text-2xl font-black">{perPersonAmount.toLocaleString()}원</div>
                                     </div>
                                 </div>
 
-                                <div className="bg-white rounded-3xl shadow-sm p-6 border border-slate-200">
-                                    <h3 className="font-black text-slate-800 text-[10px] flex items-center gap-2 uppercase tracking-widest mb-4 border-b pb-3"><Icons.Clock size={14} /> 주문 타임라인</h3>
-                                    <div className="space-y-3 max-h-48 overflow-y-auto custom-scrollbar">
-                                        {logs.length === 0 ? <div className="text-center py-10 text-slate-200 text-xs italic">기록 없음</div> : 
+                                {/* 로그 */}
+                                <div className="bg-white rounded-3xl shadow-sm p-5 border border-slate-200">
+                                    <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-4 flex items-center gap-2">Timeline</h3>
+                                    <div className="space-y-3 max-h-40 overflow-y-auto custom-scrollbar">
+                                        {logs.length === 0 ? <div className="text-center py-6 text-slate-200 text-xs italic font-medium">기록이 없습니다</div> : 
                                             logs.map(log => (
                                                 <div key={log.id} className="flex justify-between items-center animate-fadeIn">
                                                     <div className="flex items-center gap-3">
-                                                        <span className="text-[9px] font-mono font-bold text-slate-300 bg-slate-50 px-2 py-1 rounded">{log.time}</span>
-                                                        <span className="text-[13px] text-slate-600 font-bold">{log.name}</span>
+                                                        <span className="text-[9px] font-mono text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded">{log.time}</span>
+                                                        <span className="text-xs font-bold text-slate-600">{log.name}</span>
                                                     </div>
-                                                    <span className={`text-[10px] font-black px-2.5 py-1 rounded-full ${log.delta > 0 ? 'bg-blue-50 text-blue-600' : 'bg-rose-50 text-rose-600'}`}>{log.delta > 0 ? '+ 1' : '취소'}</span>
+                                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${log.delta > 0 ? 'bg-blue-50 text-blue-600' : 'bg-rose-50 text-rose-600'}`}>{log.delta > 0 ? '+ 1' : '취소'}</span>
                                                 </div>
                                             ))
                                         }
@@ -366,4 +272,3 @@
     </script>
 </body>
 </html>
-
